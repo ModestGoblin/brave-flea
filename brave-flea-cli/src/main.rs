@@ -15,6 +15,16 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-fn main() {
-    println!("Hello, world!");
+
+use std::path;
+use std::fs;
+
+use db::{Database,Result};
+
+fn main() -> Result<()> {
+    let file = fs::File::open(path::Path::new("opml.root"))?;
+    let db = Database::open_file(file, false)?;
+    println!("db = {:#?}", db);
+
+    Ok(())
 }
