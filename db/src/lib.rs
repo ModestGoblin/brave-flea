@@ -1,6 +1,4 @@
-# Brave Flea
-
-```
+/*
 Brave Flea
 Copyright (C) 2020  Ted C. Howard
 
@@ -16,4 +14,11 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
-```
+*/
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
+    }
+}

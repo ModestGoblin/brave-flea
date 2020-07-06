@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "brave-flea-cli",
+    "db",
+]
