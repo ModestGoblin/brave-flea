@@ -133,7 +133,26 @@ impl Database {
             }
         }
 
-        // TODO:
+        let db_eof = self.get_eof()?;
+        self.avail_list_shadow.clear();
+
+        let mut next_avail_adr = self.avail_list;
+
+        while next_avail_adr != NIL_DB_ADDRESS {
+            let next_avail_node = self.read_available_node(next_avail_adr)?;
+            if !next_avail_node.is_free || next_avail_adr + next_avail_node.size > db_eof {
+                self.avail_list_shadow.clear();
+                return Err(Error::from(DBError::FreeList));
+            }
+
+            self.avail_list_shadow.push(AvailableNodeShadow {
+                address: next_avail_adr,
+                size: next_avail_node.size,
+            });
+
+            next_avail_adr = next_avail_node.next_node;
+        }
+
         Ok(())
     }
 
