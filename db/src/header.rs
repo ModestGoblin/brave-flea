@@ -16,19 +16,29 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-mod available_node;
-mod db;
-mod db_error;
-mod error;
-mod header;
+use crate::error::Result;
+use std::convert::TryInto;
 
-pub use self::db::*;
-pub use self::error::*;
+pub const HEADER_SIZE: u32 = 8;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+pub struct DBHeader {
+    pub is_free: bool,
+    pub size: u32,
+    pub variance: u32,
+}
+
+impl DBHeader {
+    pub fn new(buffer: &[u8; 8]) -> Result<Self> {
+        let size_and_free = u32::from_be_bytes(buffer[0..=3].try_into()?);
+        let variance = u32::from_be_bytes(buffer[4..=7].try_into()?);
+
+        let is_free = (size_and_free & 0x80000000) == 0x80000000;
+        let size = size_and_free & 0x7FFFFFFF;
+
+        Ok(Self {
+            is_free,
+            size,
+            variance,
+        })
     }
 }

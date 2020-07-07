@@ -22,8 +22,10 @@ use std::fs;
 use std::io;
 use std::io::prelude::*;
 
-use crate::error::*;
+use crate::available_node::*;
 use crate::db_error::*;
+use crate::error::*;
+use crate::header::*;
 
 const DB_VERSION_NUMBER: u8 = 6;
 const DB_FIRST_VERSION_WITH_CACHED_SHADOW_AVAIL_LIST: u8 = 6;
@@ -33,8 +35,8 @@ const DIRTY_MASK: u16 = 0x0001;
 const MAJOR_VERSION_MASK: u8 = 0x00f0;
 // const MINOR_VERSION_MASK: u8 = 0x000f;
 
-type DBAddress = u32;
-
+pub type DBAddress = u32;
+const DB_ADDRESS_SIZE: usize = std::mem::size_of::<DBAddress>();
 const NIL_DB_ADDRESS: DBAddress = 0;
 
 #[derive(Debug)]
@@ -42,7 +44,7 @@ pub struct Database {
     system_id: u8,
     version_number: u8,
     avail_list: DBAddress,
-    dirty: bool,
+    is_dirty: bool,
     views: [DBAddress; VIEW_COUNT],
     release_stack: Vec<DBAddress>,
     file: fs::File,
@@ -50,8 +52,10 @@ pub struct Database {
     long_version_minor: u16,
     avail_list_block: DBAddress,
     avail_list_shadow: Vec<AvailableNodeShadow>,
-    read_only: bool,
+    is_read_only: bool,
 }
+
+const AVAILABLE_NODE_SHADOW_SIZE: usize = 8;
 
 #[derive(Debug)]
 struct AvailableNodeShadow {
@@ -65,7 +69,7 @@ impl Database {
             system_id: 0,
             version_number: 0,
             avail_list: 0,
-            dirty: false,
+            is_dirty: false,
             views: [0; VIEW_COUNT],
             release_stack: vec![],
             file,
@@ -73,7 +77,7 @@ impl Database {
             long_version_minor: 0,
             avail_list_block: 0,
             avail_list_shadow: vec![],
-            read_only,
+            is_read_only: read_only,
         };
 
         let mut buffer: [u8; DATABASE_RECORD_SIZE as usize] = [0; DATABASE_RECORD_SIZE as usize];
@@ -82,12 +86,14 @@ impl Database {
         db.system_id = buffer[0]; // byte 0
         db.version_number = buffer[1]; // byte 1
         db.avail_list = u32::from_be_bytes(buffer[2..=5].try_into()?); // bytes 2-5
+
         // ignore bytes 6-7 (short oldfnumdatabase)
         let flags = u16::from_be_bytes(buffer[8..=9].try_into()?); // bytes 8-9
-        db.dirty = (flags & DIRTY_MASK) != 0;
+        db.is_dirty = (flags & DIRTY_MASK) != 0;
 
-        for i in 0..VIEW_COUNT { // bytes 10-21
-            db.views[i] = u32::from_be_bytes(buffer[(i * 4) + 10..((i+1)*4)+10].try_into()?);
+        // bytes 10-21
+        for i in 0..VIEW_COUNT {
+            db.views[i] = u32::from_be_bytes(buffer[10 + (i * 4)..14 + (i * 4)].try_into()?);
         }
 
         // ignore bytes 22-25 (Handle releasestack)
@@ -97,6 +103,7 @@ impl Database {
         db.long_version_minor = u16::from_be_bytes(buffer[36..=37].try_into()?); // bytes 36-37
 
         db.avail_list_block = u32::from_be_bytes(buffer[38..=41].try_into()?); // bytes 38-41
+
         // ignore bytes 42 - 57 (handlestream availlistshadow)
         // ignore byte 58 (boolean flreadonly)
         // ignore bytes 59 - 87 (growthspace)
@@ -111,7 +118,7 @@ impl Database {
             }
 
             db.version_number = DB_VERSION_NUMBER;
-            db.dirty = true;
+            db.is_dirty = true;
         }
 
         db.shadow_avail_list()?;
@@ -120,8 +127,105 @@ impl Database {
     }
 
     fn shadow_avail_list(&mut self) -> Result<()> {
+        if self.avail_list_block != NIL_DB_ADDRESS {
+            if self.read_shadow_avail_list()? {
+                return Ok(());
+            }
+        }
+
         // TODO:
         Ok(())
+    }
+
+    fn read_shadow_avail_list(&mut self) -> Result<bool> {
+        self.avail_list_shadow.clear();
+        let db_eof = self.get_eof()?;
+
+        if self.avail_list_block == NIL_DB_ADDRESS {
+            // There is no shadow avall list
+            return Ok(false);
+        }
+
+        let buffer = self.read_block(self.avail_list_block)?;
+        let avail_shadow_count = buffer.len() / AVAILABLE_NODE_SHADOW_SIZE;
+
+        for i in 0..avail_shadow_count {
+            let address = u32::from_be_bytes(
+                buffer[(i * AVAILABLE_NODE_SHADOW_SIZE)..4 + (i * AVAILABLE_NODE_SHADOW_SIZE)]
+                    .try_into()?,
+            );
+            let size = u32::from_be_bytes(
+                buffer[4 + (i * AVAILABLE_NODE_SHADOW_SIZE)..8 + (i * AVAILABLE_NODE_SHADOW_SIZE)]
+                    .try_into()?,
+            );
+
+            if address != NIL_DB_ADDRESS {
+                self.avail_list_shadow
+                    .push(AvailableNodeShadow { address, size });
+            }
+        }
+
+        if self.avail_list_shadow.is_empty() {
+            return Err(Error::from(DBError::InconsistentAvailList));
+        }
+
+        // Test consistency of caches shadow avail list
+        let first_address = self.avail_list_shadow[0].address;
+        if first_address != self.avail_list {
+            self.avail_list_shadow.clear();
+            return Err(Error::from(DBError::InconsistentAvailList));
+        }
+
+        if first_address != NIL_DB_ADDRESS {
+            let first_node = self.read_available_node(first_address)?;
+
+            if !first_node.is_free || first_address + first_node.size > db_eof {
+                self.avail_list_shadow.clear();
+                return Err(Error::from(DBError::InconsistentAvailList));
+            }
+        }
+
+        Ok(true)
+    }
+
+    fn read_available_node(&mut self, address: DBAddress) -> Result<AvailableNode> {
+        let header = self.read_header(address)?;
+
+        let mut buffer = [0; DB_ADDRESS_SIZE];
+        self.read(address + HEADER_SIZE, DB_ADDRESS_SIZE as u32, &mut buffer)?;
+        let next_node = DBAddress::from_be_bytes(buffer);
+
+        Ok(AvailableNode {
+            is_free: header.is_free,
+            size: header.size,
+            next_node,
+        })
+    }
+
+    fn read_block(&mut self, address: DBAddress) -> Result<Vec<u8>> {
+        if address == NIL_DB_ADDRESS {
+            return Err(Error::from(DBError::InvalidAddress));
+        }
+
+        let header = self.read_header(address)?;
+
+        let block_size = header.size - header.variance;
+
+        if header.is_free {
+            return Err(Error::from(DBError::FreeBlock));
+        }
+
+        let mut buffer = vec![0; block_size as usize];
+        self.read(address + HEADER_SIZE, block_size, &mut buffer)?;
+
+        Ok(buffer)
+    }
+
+    fn read_header(&mut self, address: DBAddress) -> Result<DBHeader> {
+        let mut buffer = [0; HEADER_SIZE as usize];
+        self.read(address, HEADER_SIZE, &mut buffer)?;
+
+        DBHeader::new(&buffer)
     }
 
     fn read(&mut self, address: DBAddress, byte_count: u32, buffer: &mut [u8]) -> Result<()> {
@@ -140,5 +244,18 @@ impl Database {
     fn seek(&mut self, address: DBAddress) -> Result<()> {
         self.file.seek(io::SeekFrom::Start(address as u64))?;
         Ok(())
+    }
+
+    fn get_eof(&mut self) -> Result<DBAddress> {
+        let old_pos = self.file.seek(io::SeekFrom::Current(0))?;
+        let eof = self.file.seek(io::SeekFrom::End(0))?;
+
+        // Avoid seeking a third time when we were already at the end of the
+        // stream.
+        if old_pos != eof {
+            self.file.seek(io::SeekFrom::Start(old_pos))?;
+        }
+
+        Ok(eof as DBAddress)
     }
 }

@@ -16,19 +16,10 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-mod available_node;
-mod db;
-mod db_error;
-mod error;
-mod header;
+use crate::db::DBAddress;
 
-pub use self::db::*;
-pub use self::error::*;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
+pub struct AvailableNode {
+    pub is_free: bool,
+    pub size: u32,
+    pub next_node: DBAddress,
 }
