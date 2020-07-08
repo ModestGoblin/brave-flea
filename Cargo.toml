@@ -3,4 +3,5 @@
 members = [
     "brave-flea-cli",
     "db",
+    "object-db",
 ]

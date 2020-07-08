@@ -16,17 +16,19 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-use std::fs;
-use std::path;
+mod error;
+mod object_db;
+mod odb_error;
+mod string_utils;
+mod window_info;
 
-// use db::{Database,Result};
-use object_db::{ObjectDB, Result};
+pub use crate::error::*;
+pub use crate::object_db::*;
 
-fn main() -> Result<()> {
-    let file = fs::File::open(path::Path::new("opml.root"))?;
-    // let db = Database::open_file(file, false)?;
-    let odb = ObjectDB::load_file(file)?;
-    println!("odb = {:#?}", odb);
-
-    Ok(())
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
+    }
 }

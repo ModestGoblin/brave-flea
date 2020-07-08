@@ -126,6 +126,31 @@ impl Database {
         Ok(db)
     }
 
+    pub fn get_view(&self, view_number: usize) -> DBAddress {
+        self.views[view_number]
+    }
+
+    pub fn read_block_into_buffer(
+        &mut self,
+        address: DBAddress,
+        max_bytes: u32,
+        buffer: &mut [u8],
+    ) -> Result<()> {
+        let header = self.read_header(address)?;
+
+        if header.is_free {
+            return Err(Error::from(DBError::FreeBlock));
+        }
+
+        self.read(
+            address + HEADER_SIZE,
+            cmp::min(max_bytes, header.size - header.variance),
+            buffer,
+        )?;
+
+        Ok(())
+    }
+
     fn shadow_avail_list(&mut self) -> Result<()> {
         if self.avail_list_block != NIL_DB_ADDRESS {
             if self.read_shadow_avail_list()? {
@@ -221,7 +246,7 @@ impl Database {
         })
     }
 
-    fn read_block(&mut self, address: DBAddress) -> Result<Vec<u8>> {
+    pub fn read_block(&mut self, address: DBAddress) -> Result<Vec<u8>> {
         if address == NIL_DB_ADDRESS {
             return Err(Error::from(DBError::InvalidAddress));
         }

@@ -16,17 +16,34 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-use std::fs;
-use std::path;
+use std::error;
+use std::fmt;
 
-// use db::{Database,Result};
-use object_db::{ObjectDB, Result};
+#[derive(Debug)]
+pub enum ODBError {
+    BadDatabaseVersion,
+}
 
-fn main() -> Result<()> {
-    let file = fs::File::open(path::Path::new("opml.root"))?;
-    // let db = Database::open_file(file, false)?;
-    let odb = ObjectDB::load_file(file)?;
-    println!("odb = {:#?}", odb);
+impl ODBError {
+    fn as_str(&self) -> &'static str {
+        match *self {
+            ODBError::BadDatabaseVersion => "The version number of this database file is not recognized by this version of Brave Flea.",
+        }
+    }
+}
 
-    Ok(())
+impl fmt::Display for ODBError {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, "{}", self.as_str())
+    }
+}
+
+impl error::Error for ODBError {
+    fn description(&self) -> &str {
+        self.as_str()
+    }
+
+    fn cause(&self) -> Option<&dyn error::Error> {
+        None
+    }
 }
