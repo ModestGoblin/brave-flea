@@ -27,6 +27,7 @@ use db::{DBAddress, Database, NIL_DB_ADDRESS};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::io::prelude::*;
+use std::iter::Map;
 use std::ops::{Add, Sub};
 use std::rc::{Rc, Weak};
 use std::time;
@@ -38,6 +39,7 @@ const CLASSIC_MAC_EPOCH_OFFSET: time::Duration = time::Duration::from_secs(20828
 #[derive(Debug)]
 pub struct Table {
     nodes: HashMap<String, TableNode>,
+    sorted_keys: Vec<String>,
     // node_buckets: Vec<Option<Rc<Box<TableNode>>>>,
     // first_sorted_node: Option<Weak<Box<TableNode>>>,
     // prev_table: Option<Weak<Box<Table>>>,
@@ -76,6 +78,7 @@ impl Table {
 
         Self {
             nodes: HashMap::new(),
+            sorted_keys: vec![],
             // node_buckets: vec![None; NODE_BUCKET_COUNT],
             // first_sorted_node: None,
             // prev_table: None,
@@ -100,9 +103,10 @@ impl Table {
         }
     }
 
-    fn sorted_nodes(&self) {
-        let mut keys: Vec<_> = self.nodes.keys().collect();
-        keys.sort_by(|a, b| b.cmp(a))
+    fn sort_nodes(&mut self) {
+        let mut keys: Vec<_> = self.nodes.keys().map(|s| s.clone()).collect();
+        keys.sort_by(|a, b| a.cmp(b));
+        self.sorted_keys = keys;
     }
 
     pub fn load_system_table(db: &mut Database, address: DBAddress) -> Result<Self> {
@@ -112,7 +116,8 @@ impl Table {
             let mut variable = Variable::<Table>::new_on_disk(db, address);
             variable.load_from_disk()?;
 
-            if let VariableData::InMemory(tbl) = variable.data {
+            if let VariableData::InMemory(mut tbl) = variable.data {
+                tbl.data.sort_nodes();
                 return Ok(tbl.data);
             }
         }
