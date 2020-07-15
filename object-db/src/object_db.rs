@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 use crate::error::*;
 use crate::odb_error::*;
 use crate::string_utils::*;
+use crate::table::*;
 use crate::window_info::*;
 use db;
 use std::convert::TryInto;
@@ -39,6 +40,7 @@ pub struct ObjectDB {
     is_flag_disabled: bool,
     is_popup_disabled: bool,
     is_big_window: bool,
+    root_table: Option<Table>,
 }
 
 impl ObjectDB {
@@ -57,6 +59,7 @@ impl ObjectDB {
             is_flag_disabled: false,
             is_popup_disabled: false,
             is_big_window: false,
+            root_table: None,
         };
 
         // Brave Flea does not support ODB version 1 files
@@ -66,7 +69,7 @@ impl ObjectDB {
 
         let buffer = odb.db.read_block(address)?;
         // let version_number = u16::from_be_bytes(buffer[0..2].try_into()?);
-        // let root_table_address = u32::from_be_bytes(buffer[2..6].try_into()?);
+        let root_table_address = u32::from_be_bytes(buffer[2..6].try_into()?);
 
         // bytes 6 - 377
         let size = WINDOW_INFO_SIZE as usize;
@@ -91,9 +94,16 @@ impl ObjectDB {
         odb.is_big_window = (flags & IS_BIG_WINDOW_MASK) != 0;
 
         // TODO: load system table
+        odb.load_system_table(root_table_address, false)?;
 
         // TODO: guest root logic
 
         Ok(odb)
+    }
+
+    fn load_system_table(&mut self, address: db::DBAddress, create: bool) -> Result<()> {
+        let table = Table::load_system_table(&mut self.db, address)?;
+        self.root_table = Some(table);
+        Ok(())
     }
 }

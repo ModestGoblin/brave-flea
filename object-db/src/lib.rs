@@ -20,6 +20,10 @@ mod error;
 mod object_db;
 mod odb_error;
 mod string_utils;
+mod table;
+mod table_node;
+mod value_record;
+mod variable;
 mod window_info;
 
 pub use crate::error::*;

@@ -23,6 +23,7 @@ use std::error;
 use std::fmt;
 use std::io;
 use std::result;
+use std::time;
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -32,6 +33,7 @@ pub enum Error {
     ODB(ODBError),
     TryFromSlice(array::TryFromSliceError),
     Io(io::Error),
+    SystemTime(time::SystemTimeError),
 }
 
 impl fmt::Display for Error {
@@ -41,6 +43,7 @@ impl fmt::Display for Error {
             Error::ODB(ref err) => write!(f, "ODB error: {}", err),
             Error::TryFromSlice(ref err) => write!(f, "Array Error: {}", err),
             Error::Io(ref err) => write!(f, "IO error: {}", err),
+            Error::SystemTime(ref err) => write!(f, "SystemTime error: {}", err),
         }
     }
 }
@@ -53,6 +56,7 @@ impl error::Error for Error {
             Error::ODB(ref err) => err.description(),
             Error::TryFromSlice(ref err) => err.description(),
             Error::Io(ref err) => err.description(),
+            Error::SystemTime(ref err) => err.description(),
         }
     }
 
@@ -62,6 +66,7 @@ impl error::Error for Error {
             Error::ODB(ref err) => Some(err),
             Error::TryFromSlice(ref err) => Some(err),
             Error::Io(ref err) => Some(err),
+            Error::SystemTime(ref err) => Some(err),
         }
     }
 }
@@ -87,5 +92,11 @@ impl From<array::TryFromSliceError> for Error {
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Self {
         Error::Io(err)
+    }
+}
+
+impl From<time::SystemTimeError> for Error {
+    fn from(err: time::SystemTimeError) -> Self {
+        Error::SystemTime(err)
     }
 }

@@ -37,7 +37,7 @@ const MAJOR_VERSION_MASK: u8 = 0x00f0;
 
 pub type DBAddress = u32;
 const DB_ADDRESS_SIZE: usize = std::mem::size_of::<DBAddress>();
-const NIL_DB_ADDRESS: DBAddress = 0;
+pub const NIL_DB_ADDRESS: DBAddress = 0;
 
 #[derive(Debug)]
 pub struct Database {
