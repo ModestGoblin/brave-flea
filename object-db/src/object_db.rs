@@ -87,8 +87,11 @@ impl ObjectDB {
 
         // ignore bytes 386 - 441 (short waste[28])
 
-        let buffer = odb.db.read_block(script_string_address)?;
-        odb.script_string = read_fixed_string(&buffer);
+        if script_string_address != db::NIL_DB_ADDRESS {
+            let buffer = odb.db.read_block(script_string_address)?;
+            odb.script_string = read_fixed_string(&buffer);
+        }
+
         odb.is_flag_disabled = (flags & IS_FLAG_DISABLED_MASK) != 0;
         odb.is_popup_disabled = (flags & IS_POPUP_DISABLED_MASK) != 0;
         odb.is_big_window = (flags & IS_BIG_WINDOW_MASK) != 0;
