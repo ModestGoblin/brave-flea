@@ -23,8 +23,9 @@ use crate::error::*;
 use crate::string_utils::*;
 use crate::table_node::*;
 use crate::variable::*;
+use crate::value_record::*;
 use db::{DBAddress, Database, NIL_DB_ADDRESS};
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::TryFrom};
 use std::convert::TryInto;
 use std::io::prelude::*;
 use std::iter::Map;
@@ -150,11 +151,11 @@ impl Table {
 
         if header.version > 0 {
             self.sort_order = header.sort_order;
-            let classic_mac_epoch = time::UNIX_EPOCH.sub(CLASSIC_MAC_EPOCH_OFFSET);
+            let classic_mac_epoch = time::UNIX_EPOCH - CLASSIC_MAC_EPOCH_OFFSET;
             self.time_created =
-                classic_mac_epoch.add(time::Duration::from_secs(header.time_created as u64));
+                classic_mac_epoch + time::Duration::from_secs(header.time_created as u64);
             self.time_last_saved =
-                classic_mac_epoch.add(time::Duration::from_secs(header.time_last_saved as u64));
+                classic_mac_epoch + time::Duration::from_secs(header.time_last_saved as u64);
 
             if header.version == 2 {
                 header.flags = 0;
@@ -179,13 +180,36 @@ impl Table {
                 rec.version >>= 4;
             }
 
-            let strings_index = u32::from_be_bytes(rec.data);
+            let strings_index = u32::from_be_bytes(rec.data.try_into()?);
             let name = read_pascal_string(&strings[rec.index_key as usize..]);
             if name.is_empty() {
                 continue;
             }
 
-            self.nodes.insert(name, TableNode::new());
+            match rec.value_type {
+                x if x == DiskSymbolValueType::OldStringValue as u8 => {
+                    let string_value = read_pascal_string(&strings[strings_index as usize..]);
+                    self.nodes.insert(name, TableNode::new(Value::StringValue(string_value)));
+                },
+                x if x == DiskSymbolValueType::BooleanValue as u8 => {
+                    let bool_value = if header.version < 2 {
+                        u16::from_be_bytes(rec.data[0..2].try_into()?) != 0
+                    } else {
+                        rec.data[0] != 0
+                    };
+
+                    self.nodes.insert(name, TableNode::new(Value::BooleanValue(bool_value)));
+                },
+                x if x == DiskSymbolValueType::CharValue as u8 => {
+                    let char_value = rec.data[0] as char;
+                    self.nodes.insert(name, TableNode::new(Value::CharValue(char_value)));
+                },
+                _ => {
+                    self.nodes.insert(name, TableNode::new(Value::NoValue));
+                },
+            }
+
+
             // read_pascal_string(pstring: &[u8])
         }
 
@@ -219,20 +243,64 @@ impl DiskHeader {
     }
 }
 
-struct DiskSymbolRecord {
+enum DiskSymbolValueType {
+    Uninitialized = -1,
+    NoValue = 0,
+    CharValue = 1,
+    IntValue = 2,
+    LongValue = 3,
+    OldStringValue = 4,
+    BinaryValue = 5,
+    BooleanValue = 6,
+    TokenValue = 7,
+    DateValue = 8,
+    AddressValye = 9,
+    CodeValue = 10,
+    DoubleValue = 11,
+    StringValue = 12,
+    ExternalValue = 13,
+    DirectionValue = 14,
+    PasswordValue = 15,
+    OSTypeValue = 16,
+    Unused2Value = 17,
+    PointValue = 18,
+    RectValue = 19,
+    PatternValue = 20,
+    RGBValue = 21,
+    FixedValue = 22,
+    SingleValue = 23,
+    OldDoubleValue = 24,
+    ObjSpecValue = 25,
+    FileSpecValue = 26,
+    AliasValue = 27,
+    EnumValue = 28,
+    ListValue = 29,
+    RecordValue = 30,
+    OutlineValue,
+    WordValue,
+    HeadValue,
+    TableValue,
+    ScriptValue,
+    MenuValue,
+    PictValue,
+}
+
+
+struct DiskSymbolRecord<'a> {
     index_key: u32,
     value_type: u8,
     version: u8,
-    data: [u8; 4],
+    data: &'a [u8],
 }
 
-impl DiskSymbolRecord {
-    pub fn new(bytes: &[u8]) -> Result<Self> {
+impl<'a> DiskSymbolRecord<'a> {
+    pub fn new(bytes: &'a [u8]) -> Result<Self> {
         let index_key = u32::from_be_bytes(bytes[0..4].try_into()?);
         let value_type = bytes[4];
         let version = bytes[5];
-        let mut data = [0; 4];
-        data.clone_from_slice(&bytes[6..10]);
+        // let mut data = [0; 4];
+        // data.clone_from_slice(&bytes[6..10]);
+        let data = &bytes[6..10];
 
         Ok(Self {
             index_key,

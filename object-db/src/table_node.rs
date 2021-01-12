@@ -23,7 +23,8 @@ use std::rc::{Rc, Weak};
 pub struct TableNode {
     // next_node: Option<Rc<Box<TableNode>>>,
     // next_sorted_node: Option<Weak<Box<TableNode>>>,
-    value: ValueRecord, // TODO: make value type
+    // value: ValueRecord, // TODO: make value type
+    value: Value,
     dont_save: bool,
     is_locked: bool,
     is_protected: bool,
@@ -34,9 +35,9 @@ pub struct TableNode {
 }
 
 impl TableNode {
-    pub fn new() -> Self {
+    pub fn new(value: Value) -> Self {
         Self {
-            value: ValueRecord::new(),
+            value,
             dont_save: false,
             is_locked: false,
             is_protected: false,

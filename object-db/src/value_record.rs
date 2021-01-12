@@ -29,7 +29,7 @@ pub enum Value {
     BooleanValue(bool),
     DateValue(std::time::SystemTime),
     DoubleValue(f32),
-    StringValue(&'static str),
+    StringValue(String),
     ExternalValue,
     DiskValue(db::DBAddress),
 }

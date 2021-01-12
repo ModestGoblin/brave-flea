@@ -23,7 +23,7 @@ use std::path;
 use object_db::{ObjectDB, Result};
 
 fn main() -> Result<()> {
-    let file = fs::File::open(path::Path::new("opml.root"))?;
+    let file = fs::File::open(path::Path::new("Sample.root"))?;
     // let db = Database::open_file(file, false)?;
     let odb = ObjectDB::load_file(file)?;
     println!("odb = {:#?}", odb);

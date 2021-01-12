@@ -50,4 +50,6 @@ Temporary Items
 # Ignore all local history of files
 .history
 
-test*.root
+*.root
+!opml.root
+!Sample.root
